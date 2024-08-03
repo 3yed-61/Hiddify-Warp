@@ -54,12 +54,17 @@ def toSingBox(tag, clean_ip, detour):
     print("Generating Warp Conf")
     config_url = "https://api.zeroteam.top/warp?format=warp-go"
     conf_name = 'warp.conf'
-    subprocess.run(["wget", config_url, "-O", f"{conf_name}"])
+    try:
+        subprocess.run(["wget", config_url, "-O", f"{conf_name}"], check=True)
+    except subprocess.CalledProcessError:
+        print(f"Error: Failed to download {config_url}")
+        return None
+
     cmd = ["./warp-go", f"--config={conf_name}", "--export-singbox=proxy.json"]
     process = subprocess.run(cmd, capture_output=True, text=True)
     output = process.stdout
 
-    if (process.returncode == 0) and output:
+    if (process.returncode == 0) and os.path.exists('proxy.json'):
         with open('proxy.json', 'r') as f:
             data = json.load(f)
             wg = data["outbounds"][0]
@@ -71,6 +76,7 @@ def toSingBox(tag, clean_ip, detour):
             wg['tag'] = tag
         return wg
     else:
+        print("Error: Warp-go execution failed or proxy.json not found")
         return None
 
 
@@ -83,16 +89,22 @@ def export_SingBox(t_ips, arch):
     os.chmod("warp-go", 0o755)
 
     main_wg = toSingBox('WARP-MAIN', t_ips[0], "direct")
-    data["outbounds"].insert(1, main_wg)
+    if main_wg:
+        data["outbounds"].insert(1, main_wg)
     wiw_wg = toSingBox('WARP-WIW', t_ips[1], "WARP-MAIN")
-    data["outbounds"].insert(2, wiw_wg)
+    if wiw_wg:
+        data["outbounds"].insert(2, wiw_wg)
 
     with open('sing-box.json', 'w') as f:
         f.write(json.dumps(data, indent=4))
 
-    os.remove("warp.conf")
-    os.remove("proxy.json")
-    os.remove("warp-go")
+    # Clean up temporary files if they exist
+    if os.path.exists("warp.conf"):
+        os.remove("warp.conf")
+    if os.path.exists("proxy.json"):
+        os.remove("proxy.json")
+    if os.path.exists("warp-go"):
+        os.remove("warp-go")
 
 
 def main(script_dir):
